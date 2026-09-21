@@ -169,6 +169,50 @@ class DyslexiaAssistant {
       .getElementById("cancelDeleteBtn")
       .addEventListener("click", () => this.hideConfirmModal());
 
+    // Note Modal
+    document
+      .getElementById("closeNoteModal")
+      .addEventListener("click", () => this.hideNoteModal());
+    document
+      .getElementById("cancelNoteBtn")
+      .addEventListener("click", () => this.hideNoteModal());
+    document
+      .getElementById("saveNoteBtn")
+      .addEventListener("click", () => this._submitNoteModal());
+    // Allow Enter in title to jump to textarea
+    document
+      .getElementById("noteModalTitleInput")
+      .addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          document.getElementById("noteModalContentInput").focus();
+        }
+      });
+
+    // Bookmark Modal
+    document
+      .getElementById("closeBookmarkModal")
+      .addEventListener("click", () => this.hideBookmarkModal());
+    document
+      .getElementById("cancelBookmarkBtn")
+      .addEventListener("click", () => this.hideBookmarkModal());
+    document
+      .getElementById("saveBookmarkBtn")
+      .addEventListener("click", () => this._submitBookmarkModal());
+    document
+      .getElementById("bookmarkNameInput")
+      .addEventListener("keydown", (e) => {
+        if (e.key === "Enter") this._submitBookmarkModal();
+      });
+
+    // Close note/bookmark modals on backdrop click
+    document.getElementById("noteModal").addEventListener("click", (e) => {
+      if (e.target === document.getElementById("noteModal")) this.hideNoteModal();
+    });
+    document.getElementById("bookmarkModal").addEventListener("click", (e) => {
+      if (e.target === document.getElementById("bookmarkModal")) this.hideBookmarkModal();
+    });
+
     // Word Search Popup
     document.getElementById("popupGoogleBtn").addEventListener("click", () => {
       const word = this._popupSelectedText;
@@ -984,17 +1028,69 @@ class DyslexiaAssistant {
   }
 
   openNoteModal() {
-    const title = prompt("📝 Note Title:");
-    if (!title) return;
-
-    const content = prompt("📝 Note Content:");
-    if (content === null) return;
-
-    const note = this.notesManager.addNote(title, content);
-    if (note) {
-      this.displayNotes();
-      alert("✅ Note saved!");
+    if (!this.currentDoc) {
+      this.showToast("Please load a document first", "warning");
+      return;
     }
+    this.showNoteModal();
+  }
+
+  showNoteModal(existingNote = null) {
+    const modal = document.getElementById("noteModal");
+    const titleEl = document.getElementById("noteModalTitle");
+    const titleInput = document.getElementById("noteModalTitleInput");
+    const contentInput = document.getElementById("noteModalContentInput");
+    const saveBtn = document.getElementById("saveNoteBtn");
+    const errorEl = document.getElementById("noteModalError");
+
+    // Set mode — create vs edit
+    if (existingNote) {
+      titleEl.textContent = "✏️ Edit Note";
+      titleInput.value = existingNote.title;
+      contentInput.value = existingNote.content;
+      saveBtn.textContent = "Save Changes";
+      this._editingNoteId = existingNote.id;
+    } else {
+      titleEl.textContent = "📝 Add Note";
+      titleInput.value = "";
+      contentInput.value = "";
+      saveBtn.textContent = "Save Note";
+      this._editingNoteId = null;
+    }
+
+    errorEl.style.display = "none";
+    modal.style.display = "flex";
+    setTimeout(() => titleInput.focus(), 60);
+  }
+
+  hideNoteModal() {
+    document.getElementById("noteModal").style.display = "none";
+    this._editingNoteId = null;
+  }
+
+  _submitNoteModal() {
+    const title = document.getElementById("noteModalTitleInput").value.trim();
+    const content = document.getElementById("noteModalContentInput").value.trim();
+    const errorEl = document.getElementById("noteModalError");
+
+    if (!title) {
+      errorEl.textContent = "Please enter a title for your note.";
+      errorEl.style.display = "block";
+      document.getElementById("noteModalTitleInput").focus();
+      return;
+    }
+
+    if (this._editingNoteId) {
+      this.notesManager.updateNote(this._editingNoteId, title, content);
+      this.showToast("Note updated!", "success");
+    } else {
+      const note = this.notesManager.addNote(title, content);
+      if (!note) return;
+      this.showToast("Note saved!", "success");
+    }
+
+    this.displayNotes();
+    this.hideNoteModal();
   }
 
   displayNotes() {
@@ -1051,38 +1147,57 @@ class DyslexiaAssistant {
   editNote(noteId) {
     const note = this.notesManager.getNote(noteId);
     if (!note) return;
-
-    const newTitle = prompt("Edit Title:", note.title);
-    if (!newTitle) return;
-
-    const newContent = prompt("Edit Content:", note.content);
-    if (newContent === null) return;
-
-    this.notesManager.updateNote(noteId, newTitle, newContent);
-    this.displayNotes();
-    alert("✅ Note updated!");
+    this.showNoteModal(note);
   }
 
   // BOOKMARKS SYSTEM
 
   addBookmark() {
-    if (!this.currentDoc) return;
+    if (!this.currentDoc) {
+      this.showToast("Please load a document first", "warning");
+      return;
+    }
+    this.showBookmarkModal();
+  }
 
-    const bookmarkName = prompt("⭐ Bookmark name:");
-    if (!bookmarkName) return;
+  showBookmarkModal() {
+    const modal = document.getElementById("bookmarkModal");
+    const input = document.getElementById("bookmarkNameInput");
+    const errorEl = document.getElementById("bookmarkModalError");
+    input.value = "";
+    errorEl.style.display = "none";
+    modal.style.display = "flex";
+    setTimeout(() => input.focus(), 60);
+  }
+
+  hideBookmarkModal() {
+    document.getElementById("bookmarkModal").style.display = "none";
+  }
+
+  _submitBookmarkModal() {
+    const name = document.getElementById("bookmarkNameInput").value.trim();
+    const errorEl = document.getElementById("bookmarkModalError");
+
+    if (!name) {
+      errorEl.textContent = "Please enter a name for your bookmark.";
+      errorEl.style.display = "block";
+      document.getElementById("bookmarkNameInput").focus();
+      return;
+    }
 
     const bookmark = {
       id: "bm-" + Date.now(),
       docId: this.currentDoc.id,
       docName: this.currentDoc.name,
-      name: bookmarkName,
+      name,
       timestamp: new Date().toISOString(),
     };
 
     this.bookmarks.push(bookmark);
     this.saveBookmarks();
     this.displayBookmarks();
-    alert("✅ Bookmark added!");
+    this.hideBookmarkModal();
+    this.showToast("Bookmark saved!", "success");
   }
 
   displayBookmarks() {
